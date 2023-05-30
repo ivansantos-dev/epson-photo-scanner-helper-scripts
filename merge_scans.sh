@@ -1,69 +1,67 @@
 #!/bin/bash
 
-while getopts f:s:g:o: flag
-do
-    case "${flag}" in
-        f) f1=${OPTARG};;
-        s) f2=${OPTARG};;
-        g) new_grouping=${OPTARG};;
-        o) output_folder=${OPTARG};;
-        \?) echo "Invalid option: -$OPTARG" >&2; exit 1 ;;
-        :)  echo "Option -$OPTARG requires an argument." >&2; exit 1 ;;
-    esac
-done
-
-echo "First folder: $f1";
-echo "Second folder: $f2";
-echo "New Grouping name: $new_grouping";
-
-if [ ! -n "$output_folder" ] ;then 
-    output_folder="output"
-fi
-
-output_dir="$output_folder/$new_grouping"
-echo "Output Dir": $output_dir;
-
-
-if [ -z "$f1" ] || [ -z "$f2" ] || [ -z "$new_grouping" ]; then
-    echo "Usage: $0 -f first_folder -s second_folder -g new_grouping -o output_dir"
-    echo "Merge files from first_folder and second_folder, copy all the files to output_dir/new_grouping and rename the files in order using integers"
+# Check input arguments
+if [[ $# -ne 3 ]]; then
+    echo "Usage: $0 grouping_word output_dir merge_dir1,merge_dir2"
     exit 1
 fi
 
-# Sort all files from f1 first, then sort files from f2 and add to the sorted_files array
-sorted_files=($(ls "$f1" | sort) $(ls "$f2" | sort))
-echo "Sorted files: ${sorted_files[@]}"
+grouping_word=$1
+input_output_dir="$2"
+dirs=$3
+output_dir="${input_output_dir}/${grouping_word}-merge-output"
 
-read -p "Do you want to continue? (yes/no): " choice
+# Create output directory if it doesn't exist
+mkdir -p $output_dir
 
-if [ "$choice" == "no" ]; then
-    exit 0
-fi
+# Initialize counter
+counter=0
 
-if [ ! -d "$output_dir" ]; then
-    echo "Generating output dir"
-    mkdir -p "$output_dir"
-fi
+# Function to copy and rename files
+copy_and_rename() {
+    local dir=$1
+    local current_seq=""
 
+    # Get a sorted list of files, grouped by sequence number
+    files=$(find "$dir" -type f \( -iname "*_????.jpg" -o -iname "*_????_*.jpg" \) | sort -t '_' -k2,2n)
 
-# Copy files to output_dir and rename in order using integers
-i=1
-for file in "${sorted_files[@]}"; do
-    number=`printf "%04d\n" $i`
+    # Read files line by line
+    while IFS= read -r file
+    do
 
-    suffix=""
-    
-    if [[ "${file}" == *"_a.jpg" ]]; then
-        suffix="_a"
-    elif [[ "${file}" == *"_b.jpg" ]]; then
-        suffix="_b"
-    fi
+        # Continue if file doesn't exist
+        [[ -e $file ]] || continue
 
-    new_file="$output_dir/${new_grouping}_${number}${suffix}.jpg"
-    echo "Creating file $new_file"
-    cp "$f1/$file" $new_file 2>/dev/null || cp "$f2/$file" $new_file
+        # Construct new filename
+        base=$(basename "$file")
+        prefix="${base%%_*}"
+        sequence="${base#*_}"
+        sequence="${sequence%%_*}"
+        variant="${base#*_$sequence}"
+        variant="${variant%.jpg}"
 
-    if [ -z "$suffix" ]; then
-         i=$((i + 1))
+        actual_sequence=${sequence%.jpg}
+        if [[ "$actual_sequence" != "$current_seq" ]]; then
+            current_seq="$actual_sequence"
+            counter=$((counter+1))
+        fi
+
+        new_file="${grouping_word}_$(printf "%04d" $counter)${variant}.jpg"
+        echo "copy $file -> $output_dir/$new_file"
+        cp "$file" "$output_dir/$new_file"
+    done <<< "$files"
+}
+
+# Iterate over the directories
+IFS=',' read -ra dir_list <<< "$dirs"
+for dir in "${dir_list[@]}"; do
+    dir=$(eval echo "$dir")
+    if [[ -d "$dir" ]]; then
+        copy_and_rename "$dir"
+    else
+        echo "Warning: $dir does not exist or is not a directory."
     fi
 done
+
+echo "Files copied and renamed in $output_dir"
+

@@ -1,4 +1,4 @@
-#1!/bin/bash
+#!/bin/bash
 
 # Check input arguments
 if [[ $# -ne 3 ]]; then
@@ -26,7 +26,7 @@ copy_and_rename() {
     local start=$1
     local end=$2
     echo range:$start-$end
-    for (( i=$((10#$start)); i<=$((10#$end)); i++ )); do
+    for (( i=$((10#$start)); i>=$((10#$end)); i-- )); do
         num=$(printf "%04d" $i)
         for file in "$input_dir"/*"_$num"_*.jpg "$input_dir"/*"_$num".jpg; do
             echo processing:$file
